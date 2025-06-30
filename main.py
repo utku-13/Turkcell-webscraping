@@ -1,256 +1,249 @@
-import time
-import random
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+import csv
+import os
 
-class TurkcellReviewScraper:
-    def __init__(self):
-        self.driver = None
-        self.wait = None
-        self.setup_driver()
+url_1 = "https://www.google.com/maps/place/Pera+Turkcell+%C4%B0leti%C5%9Fim+Merkezi/@41.0359664,28.975326,16z/data=!4m12!1m2!2m1!1sturkcell+taksim!3m8!1s0x14cab9e00b444573:0xae4d363847ab0b6b!8m2!3d41.0310797!4d28.9757005!9m1!1b1!15sCg90dXJrY2VsbCB0YWtzaW0iA4gBAVoRIg90dXJrY2VsbCB0YWtzaW2SASN0ZWxlY29tbXVuaWNhdGlvbnNfc2VydmljZV9wcm92aWRlcqoBYAoNL2cvMTFjMmtjaG5oMQoJL20vMDcybHhnEAEqDCIIdHVya2NlbGwoITIfEAEiG-52ldX8Y5PJfAxuqT3Vo3BGHt1tpp9_55l__DITEAIiD3R1cmtjZWxsIHRha3NpbeABAA!16s%2Fg%2F11b6_x5ql6?entry=ttu&g_ep=EgoyMDI1MDYyNi4wIKXMDSoASAFQAw%3D%3D"
+
+def setup_driver():
+    """Set up Chrome WebDriver with basic options"""
+    chrome_options = Options()
     
-    def setup_driver(self):
-        """Setup Chrome driver with optimal settings"""
-        chrome_options = Options()
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        
-        self.driver = webdriver.Chrome(options=chrome_options)
-        self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        self.wait = WebDriverWait(self.driver, 15)
+    # Add some useful options
+    chrome_options.add_argument("--start-maximized")  # Start maximized
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    def search_turkcell_locations(self):
-        """Search for Turkcell on Google Maps and get first 3 locations"""
-        print("🔍 Searching for Turkcell locations on Google Maps...")
-        
-        # Go to Google Maps
-        self.driver.get("https://www.google.com/maps")
-        time.sleep(random.uniform(2, 4))
-        
-        # Search for Turkcell
-        search_box = self.wait.until(EC.element_to_be_clickable((By.ID, "searchboxinput")))
-        search_box.clear()
-        search_box.send_keys("turkcell")
-        search_box.send_keys(Keys.RETURN)
-        
-        # Wait for results to load
-        time.sleep(random.uniform(3, 5))
-        
-        # Get the first 3 location links
-        locations = []
+    # Optional: Add headless mode (uncomment if you want to run without GUI)
+    # chrome_options.add_argument("--headless")
+    
+    # Set up the service with WebDriverManager
+    service = Service(ChromeDriverManager().install())
+    
+    # Create and return the driver
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    
+    # Execute script to remove webdriver property
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    
+    return driver
+
+def load_existing_reviewers(filename):
+    """Load existing reviewer names from CSV file"""
+    existing_reviewers = set()
+    if os.path.exists(filename):
         try:
-            # Wait for search results
-            self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[role='article']")))
-            
-            # Find location elements
-            location_elements = self.driver.find_elements(By.CSS_SELECTOR, "[role='article'] a[href*='/maps/place/']")[:3]
-            
-            for i, element in enumerate(location_elements):
-                try:
-                    location_name = element.find_element(By.CSS_SELECTOR, "[role='heading']").text
-                    location_url = element.get_attribute('href')
-                    locations.append({
-                        'name': location_name,
-                        'url': location_url,
-                        'index': i + 1
-                    })
-                    print(f"✅ Found location {i+1}: {location_name}")
-                except Exception as e:
-                    print(f"❌ Error getting location {i+1}: {e}")
-                    
-        except TimeoutException:
-            print("❌ Timeout waiting for search results")
-            
-        return locations
-    
-    def get_location_reviews(self, location):
-        """Get reviews for a specific location"""
-        print(f"\n📍 Getting reviews for: {location['name']}")
-        
-        try:
-            # Navigate to location
-            self.driver.get(location['url'])
-            time.sleep(random.uniform(3, 5))
-            
-            # Click on reviews tab
-            try:
-                reviews_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@data-tab-index, '1')]")))
-                reviews_button.click()
-                time.sleep(random.uniform(2, 4))
-            except:
-                # Try alternative selector for reviews
-                try:
-                    reviews_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Yorumlar') or contains(@aria-label, 'Yorumlar')]")))
-                    reviews_button.click()
-                    time.sleep(random.uniform(2, 4))
-                except:
-                    print("❌ Could not find reviews button")
-                    return []
-            
-            # Sort by newest (if available)
-            try:
-                sort_button = self.driver.find_element(By.XPATH, "//button[contains(@data-value, 'Sort')]")
-                sort_button.click()
-                time.sleep(1)
-                newest_option = self.driver.find_element(By.XPATH, "//div[contains(text(), 'En yeni') or contains(text(), 'Newest')]")
-                newest_option.click()
-                time.sleep(random.uniform(2, 3))
-            except:
-                print("⚠️  Could not sort by newest, using default order")
-            
-            # Scroll to load more reviews
-            self.scroll_to_load_reviews()
-            
-            # Extract reviews
-            reviews = self.extract_reviews()
-            
-            return reviews[:10]  # Return top 10
-            
+            with open(filename, 'r', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    existing_reviewers.add(row['reviewer_name'])
         except Exception as e:
-            print(f"❌ Error getting reviews for {location['name']}: {e}")
-            return []
+            print(f"Error reading existing CSV: {e}")
+    return existing_reviewers
+
+def save_reviews_to_csv(reviews_data, filename):
+    """Save reviews to CSV file"""
+    file_exists = os.path.exists(filename)
     
-    def scroll_to_load_reviews(self):
-        """Scroll down to load more reviews"""
-        print("📜 Loading reviews...")
+    with open(filename, 'a', newline='', encoding='utf-8') as file:
+        fieldnames = ['reviewer_name', 'star_count', 'review_text']
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
         
-        try:
-            # Find scrollable reviews container
-            scrollable_div = self.driver.find_element(By.CSS_SELECTOR, "[role='main']")
-            
-            last_height = self.driver.execute_script("return arguments[0].scrollHeight", scrollable_div)
-            scroll_attempts = 0
-            max_scrolls = 5  # Limit scrolling to prevent infinite loops
-            
-            while scroll_attempts < max_scrolls:
-                # Scroll down
-                self.driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight);", scrollable_div)
-                time.sleep(random.uniform(2, 3))
-                
-                # Calculate new scroll height
-                new_height = self.driver.execute_script("return arguments[0].scrollHeight", scrollable_div)
-                
-                if new_height == last_height:
-                    break
-                    
-                last_height = new_height
-                scroll_attempts += 1
-                
-        except Exception as e:
-            print(f"⚠️  Error while scrolling: {e}")
+        # Write header only if file doesn't exist
+        if not file_exists:
+            writer.writeheader()
+        
+        # Write all reviews
+        for review_data in reviews_data:
+            writer.writerow(review_data)
+
+def get_reviews():
+    """Print all reviewer names from the CSV file"""
+    csv_filename = "turkcell_reviews.csv"
     
-    def extract_reviews(self):
-        """Extract review data from the page"""
-        reviews = []
-        
-        try:
-            # Find all review elements
-            review_elements = self.driver.find_elements(By.CSS_SELECTOR, "[data-review-id]")
+    if not os.path.exists(csv_filename):
+        print(f"CSV file '{csv_filename}' not found!")
+        return
+    
+    try:
+        with open(csv_filename, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            reviewer_names = []
             
-            for review_element in review_elements:
-                try:
-                    # Extract reviewer name
-                    name_element = review_element.find_element(By.CSS_SELECTOR, "[role='button']")
-                    reviewer_name = name_element.get_attribute('aria-label') or name_element.text
-                    
-                    # Extract rating
-                    try:
-                        rating_element = review_element.find_element(By.CSS_SELECTOR, "[role='img'][aria-label*='star']")
-                        rating_text = rating_element.get_attribute('aria-label')
-                        rating = rating_text.split()[0] if rating_text else "No rating"
-                    except:
-                        rating = "No rating"
-                    
-                    # Extract review text
-                    try:
-                        # Try to click "more" button if it exists
-                        more_button = review_element.find_element(By.CSS_SELECTOR, "button[aria-label*='daha fazla']")
-                        more_button.click()
-                        time.sleep(0.5)
-                    except:
-                        pass
-                    
-                    try:
-                        text_element = review_element.find_element(By.CSS_SELECTOR, "[data-expandable-text]")
-                        review_text = text_element.text
-                    except:
+            for row in reader:
+                reviewer_names.append(row['reviewer_name'])
+            
+            if reviewer_names:
+                print(f"Found {len(reviewer_names)} reviewers in CSV:")
+                print("-" * 50)
+                for i, name in enumerate(reviewer_names, 1):
+                    print(f"{i}. {name}")
+                print("-" * 50)
+            else:
+                print("No reviewers found in CSV file.")
+                
+    except Exception as e:
+        print(f"Error reading CSV file: {e}")
+
+def main():
+    """Main function to run the Selenium script"""
+    driver = None
+    csv_filename = "turkcell_reviews.csv"
+    
+    # Load existing reviewers to avoid duplicates
+    existing_reviewers = load_existing_reviewers(csv_filename)
+    print(f"Found {len(existing_reviewers)} existing reviewers in CSV")
+    
+    # List to store new review data
+    new_reviews = []
+    
+    try:
+        print("Setting up Chrome WebDriver...")
+        driver = setup_driver()
+        
+        print("Navigating to Google.com...")
+        driver.get(url_1)
+        
+        print("Successfully opened Google.com!")
+        print("You can now continue with your automation...")
+        
+        # Wait for 5 seconds so you can see the browser 
+        
+        # You can add your code here
+        # For example:
+        # search_box = driver.find_element(By.ID, "searchboxinput")
+        # search_box.click()
+        # search_box.send_keys("turkcell")
+        # search_box.send_keys(Keys.ENTER)
+        
+        # Wait for page to load
+        time.sleep(3)
+        
+        # Click the "En yeni" button
+        en_yeni_button = driver.find_element(By.CSS_SELECTOR, 'button[aria-label="En alakalı"]')
+        en_yeni_button.click()
+        
+        # Wait for dropdown to appear
+        time.sleep(2)
+        
+        # Select the div element with data-index="1"
+        dropdown_option = driver.find_element(By.CSS_SELECTOR, 'div[data-index="1"]')
+        dropdown_option.click()
+        
+        # Wait for reviews to load
+        time.sleep(5)
+        
+        # Scrape reviews that are 2 months or newer
+        print("Extracting reviews that are 2 months or newer...")
+        
+        reviews = driver.find_elements(By.CSS_SELECTOR, 'div.jftiEf.fontBodyMedium')
+        
+        for review in reviews:
+            try:
+                # Get the time element
+                time_element = review.find_element(By.CSS_SELECTOR, 'span.rsqaWe')
+                time_text = time_element.text.strip()
+                
+                # Check if review is 3 months or older and stop
+                if "ay önce" in time_text:
+                    if "bir ay" in time_text:
+                        months = 1
+                    else:
+                        # Extract number before "ay önce"
                         try:
-                            text_element = review_element.find_element(By.CSS_SELECTOR, "span[role='text']")
-                            review_text = text_element.text
+                            months = int(time_text.split()[0])
                         except:
-                            review_text = "No text available"
+                            months = 1
                     
-                    if reviewer_name and reviewer_name.strip():
-                        reviews.append({
-                            'reviewer_name': reviewer_name,
-                            'rating': rating,
-                            'text': review_text
-                        })
+                    # Stop if 3 months or older
+                    if months >= 3:
+                        print(f"Reached {months} month old review, stopping...")
+                        break
+                
+                # Get reviewer name
+                try:
+                    name_element = review.find_element(By.CSS_SELECTOR, 'div.d4r55')
+                    reviewer_name = name_element.text.strip()
+                except:
+                    reviewer_name = "Unknown"
+                
+                # Skip if reviewer already exists in CSV
+                if reviewer_name in existing_reviewers:
+                    print(f"Skipping {reviewer_name} - already in CSV")
+                    continue
+                
+                # Get star rating and check if less than 3 stars
+                try:
+                    star_element = review.find_element(By.CSS_SELECTOR, 'span.kvMYJc')
+                    star_label = star_element.get_attribute('aria-label')
+                    
+                    # Extract number of stars from aria-label (e.g., "1 yıldız" -> 1)
+                    if "yıldız" in star_label:
+                        star_count = int(star_label.split()[0])
                         
-                except Exception as e:
-                    print(f"⚠️  Error extracting individual review: {e}")
+                        # Only process if less than 3 stars
+                        if star_count >= 3:
+                            continue
+                    else:
+                        continue
+                        
+                except:
+                    # Skip if can't find star rating
+                    continue
+                
+                # Get review text
+                try:
+                    review_text_element = review.find_element(By.CSS_SELECTOR, 'div.MyEned span.wiI7pd')
+                    review_text = review_text_element.text.strip()
+                    
+                    # Add to new reviews list
+                    review_data = {
+                        'reviewer_name': reviewer_name,
+                        'star_count': star_count,
+                        'review_text': review_text
+                    }
+                    new_reviews.append(review_data)
+                    
+                    # Print the review info
+                    print(f"\n--- Review from {time_text} ({star_count} stars) ---")
+                    print(f"Reviewer: {reviewer_name}")
+                    print(f"Comment: {review_text}")
+                    
+                except:
+                    # Skip reviews without text
                     continue
                     
-        except Exception as e:
-            print(f"❌ Error finding review elements: {e}")
-            
-        return reviews
-    
-    def print_reviews(self, location, reviews):
-        """Print reviews in a formatted way"""
-        print(f"\n{'='*60}")
-        print(f"📍 LOCATION: {location['name']}")
-        print(f"{'='*60}")
+            except Exception as e:
+                continue
         
-        if not reviews:
-            print("❌ No reviews found for this location")
-            return
-            
-        for i, review in enumerate(reviews, 1):
-            print(f"\n--- Review {i} ---")
-            print(f"👤 Reviewer: {review['reviewer_name']}")
-            print(f"⭐ Rating: {review['rating']}")
-            print(f"💬 Text: {review['text'][:200]}{'...' if len(review['text']) > 200 else ''}")
-            print("-" * 40)
-    
-    def run(self):
-        """Main execution method"""
-        try:
-            print("🚀 Starting Turkcell Google Maps Review Scraper")
-            
-            # Search for locations
-            locations = self.search_turkcell_locations()
-            
-            if not locations:
-                print("❌ No locations found")
-                return
-                
-            print(f"\n✅ Found {len(locations)} locations")
-            
-            # Get reviews for each location
-            for location in locations:
-                reviews = self.get_location_reviews(location)
-                self.print_reviews(location, reviews)
-                
-                # Add delay between locations
-                time.sleep(random.uniform(3, 5))
-                
-        except Exception as e:
-            print(f"❌ Fatal error: {e}")
-        finally:
-            if self.driver:
-                print("\n🔄 Closing browser...")
-                self.driver.quit()
+        # Save new reviews to CSV
+        if new_reviews:
+            save_reviews_to_csv(new_reviews, csv_filename)
+            print(f"\nSaved {len(new_reviews)} new reviews to {csv_filename}")
+        else:
+            print("\nNo new reviews found to save")
+        
+        print("Searching for turkcell...")
+        time.sleep(5)
+        
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        
+    finally:
+        # Clean up: close the browser
+        if driver:
+            print("Closing browser...")
+            time.sleep(5)
+            driver.quit()
+
+    get_reviews()
+
 
 if __name__ == "__main__":
-    scraper = TurkcellReviewScraper()
-    scraper.run()
+    main()
