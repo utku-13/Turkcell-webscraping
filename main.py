@@ -188,7 +188,7 @@ def main():
                         star_count = int(star_label.split()[0])
                         
                         # Only process if less than 3 stars
-                        if star_count >= 3:
+                        if star_count >= 4:
                             continue
                     else:
                         continue
